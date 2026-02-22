@@ -2,12 +2,16 @@
 /**
  * Plugin Name: Test Topbar
  * Description: Adds a configurable top bar on every front-end page.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Cursor Agent
  */
 
 if (!defined('ABSPATH')) {
     exit;
+}
+
+if (!defined('TEST_TOPBAR_PLUGIN_VERSION')) {
+    define('TEST_TOPBAR_PLUGIN_VERSION', '1.3.0');
 }
 
 /**
@@ -100,6 +104,8 @@ function test_topbar_get_default_settings() {
         'enabled' => 1,
         'text' => 'TEST',
         'css' => test_topbar_get_default_css(),
+        'manual_version' => TEST_TOPBAR_PLUGIN_VERSION,
+        'version_notes' => "1.3.0 - Added a Versions settings tab with editable release notes.",
     );
 }
 
@@ -145,15 +151,25 @@ function test_topbar_sanitize_css($css) {
  */
 function test_topbar_sanitize_settings($input) {
     $defaults = test_topbar_get_default_settings();
-    $output = $defaults;
+    $current = test_topbar_get_settings();
+    $output = wp_parse_args($current, $defaults);
 
     if (!is_array($input)) {
         return $output;
     }
 
+    $active_tab = isset($input['_active_tab']) ? sanitize_key((string) $input['_active_tab']) : 'output';
+
+    if ($active_tab === 'versions') {
+        $output['manual_version'] = isset($input['manual_version']) ? sanitize_text_field(wp_unslash((string) $input['manual_version'])) : $output['manual_version'];
+        $output['version_notes'] = isset($input['version_notes']) ? sanitize_textarea_field(wp_unslash((string) $input['version_notes'])) : $output['version_notes'];
+
+        return $output;
+    }
+
     $output['enabled'] = empty($input['enabled']) ? 0 : 1;
-    $output['text'] = isset($input['text']) ? sanitize_text_field(wp_unslash((string) $input['text'])) : $defaults['text'];
-    $output['css'] = isset($input['css']) ? test_topbar_sanitize_css(wp_unslash((string) $input['css'])) : $defaults['css'];
+    $output['text'] = isset($input['text']) ? sanitize_text_field(wp_unslash((string) $input['text'])) : $output['text'];
+    $output['css'] = isset($input['css']) ? test_topbar_sanitize_css(wp_unslash((string) $input['css'])) : $output['css'];
 
     return $output;
 }
@@ -234,14 +250,14 @@ function test_topbar_register_settings() {
         'test_topbar_main_section',
         'Front-end output',
         'test_topbar_main_section_description',
-        'test-topbar-settings'
+        'test-topbar-settings-output'
     );
 
     add_settings_field(
         'test_topbar_enabled',
         'Enable top bar',
         'test_topbar_enabled_field',
-        'test-topbar-settings',
+        'test-topbar-settings-output',
         'test_topbar_main_section'
     );
 
@@ -249,7 +265,7 @@ function test_topbar_register_settings() {
         'test_topbar_text',
         'Top bar text',
         'test_topbar_text_field',
-        'test-topbar-settings',
+        'test-topbar-settings-output',
         'test_topbar_main_section'
     );
 
@@ -257,8 +273,39 @@ function test_topbar_register_settings() {
         'test_topbar_css',
         'Top bar CSS',
         'test_topbar_css_field',
-        'test-topbar-settings',
+        'test-topbar-settings-output',
         'test_topbar_main_section'
+    );
+
+    add_settings_section(
+        'test_topbar_versions_section',
+        'Version details',
+        'test_topbar_versions_section_description',
+        'test-topbar-settings-versions'
+    );
+
+    add_settings_field(
+        'test_topbar_code_version',
+        'Code version',
+        'test_topbar_code_version_field',
+        'test-topbar-settings-versions',
+        'test_topbar_versions_section'
+    );
+
+    add_settings_field(
+        'test_topbar_manual_version',
+        'Manual version',
+        'test_topbar_manual_version_field',
+        'test-topbar-settings-versions',
+        'test_topbar_versions_section'
+    );
+
+    add_settings_field(
+        'test_topbar_version_notes',
+        'Version notes',
+        'test_topbar_version_notes_field',
+        'test-topbar-settings-versions',
+        'test_topbar_versions_section'
     );
 }
 add_action('admin_init', 'test_topbar_register_settings');
@@ -282,6 +329,13 @@ add_action('admin_menu', 'test_topbar_add_settings_page');
  */
 function test_topbar_main_section_description() {
     echo '<p>Control the front-end text and CSS for the top bar. CSS is output exactly as provided.</p>';
+}
+
+/**
+ * Print versions section helper text.
+ */
+function test_topbar_versions_section_description() {
+    echo '<p>Track plugin version info and maintain manual release notes.</p>';
 }
 
 /**
@@ -330,19 +384,114 @@ function test_topbar_css_field() {
 }
 
 /**
+ * Render code version display field.
+ */
+function test_topbar_code_version_field() {
+    ?>
+    <code><?php echo esc_html(TEST_TOPBAR_PLUGIN_VERSION); ?></code>
+    <p class="description">This comes from the plugin file version constant.</p>
+    <?php
+}
+
+/**
+ * Render manual version field.
+ */
+function test_topbar_manual_version_field() {
+    $settings = test_topbar_get_settings();
+    ?>
+    <input
+        type="text"
+        name="test_topbar_settings[manual_version]"
+        value="<?php echo esc_attr((string) $settings['manual_version']); ?>"
+        class="regular-text"
+        placeholder="<?php echo esc_attr(TEST_TOPBAR_PLUGIN_VERSION); ?>"
+    />
+    <?php
+}
+
+/**
+ * Render manual version notes field.
+ */
+function test_topbar_version_notes_field() {
+    $settings = test_topbar_get_settings();
+    ?>
+    <textarea
+        name="test_topbar_settings[version_notes]"
+        rows="10"
+        class="large-text"
+        spellcheck="true"
+    ><?php echo esc_textarea((string) $settings['version_notes']); ?></textarea>
+    <p class="description">Add human-written notes for the current release.</p>
+    <?php
+}
+
+/**
+ * Return the active settings tab key.
+ *
+ * @return string
+ */
+function test_topbar_get_active_settings_tab() {
+    $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash((string) $_GET['tab'])) : 'output';
+    $allowed_tabs = array('output', 'versions');
+
+    if (!in_array($tab, $allowed_tabs, true)) {
+        return 'output';
+    }
+
+    return $tab;
+}
+
+/**
+ * Render settings tabs.
+ *
+ * @param string $active_tab Selected tab.
+ */
+function test_topbar_render_settings_tabs($active_tab) {
+    $tabs = array(
+        'output' => 'Front-end Output',
+        'versions' => 'Versions',
+    );
+
+    echo '<nav class="nav-tab-wrapper">';
+
+    foreach ($tabs as $tab_key => $tab_label) {
+        $tab_url = add_query_arg(
+            array(
+                'page' => 'test-topbar-settings',
+                'tab' => $tab_key,
+            ),
+            admin_url('options-general.php')
+        );
+
+        $active_class = $tab_key === $active_tab ? ' nav-tab-active' : '';
+
+        echo '<a href="' . esc_url($tab_url) . '" class="nav-tab' . esc_attr($active_class) . '">' . esc_html($tab_label) . '</a>';
+    }
+
+    echo '</nav>';
+}
+
+/**
  * Render the plugin settings page markup.
  */
 function test_topbar_render_settings_page() {
     if (!current_user_can('manage_options')) {
         return;
     }
+
+    $active_tab = test_topbar_get_active_settings_tab();
+    $settings_page = $active_tab === 'versions' ? 'test-topbar-settings-versions' : 'test-topbar-settings-output';
     ?>
     <div class="wrap">
         <h1>Test Topbar Settings</h1>
+        <?php test_topbar_render_settings_tabs($active_tab); ?>
         <form action="options.php" method="post">
             <?php
             settings_fields('test_topbar_settings_group');
-            do_settings_sections('test-topbar-settings');
+            ?>
+            <input type="hidden" name="test_topbar_settings[_active_tab]" value="<?php echo esc_attr($active_tab); ?>" />
+            <?php
+            do_settings_sections($settings_page);
             submit_button('Save Changes');
             ?>
         </form>

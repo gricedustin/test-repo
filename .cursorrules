@@ -1,0 +1,15 @@
+# Project AI rules
+
+When editing this repository, especially `test-topbar-plugin.php`:
+
+1. Always update plugin version metadata together:
+   - The plugin header `Version:` value
+   - `TEST_TOPBAR_PLUGIN_VERSION` constant
+
+2. Always update version content shown in wp-admin:
+   - `manual_version` default in `test_topbar_get_default_settings()`
+   - `version_notes` default in `test_topbar_get_default_settings()`
+
+3. Keep the **Versions** tab behavior intact in Settings -> Test Topbar.
+
+4. Do not remove existing plugin settings fields unless explicitly requested.
